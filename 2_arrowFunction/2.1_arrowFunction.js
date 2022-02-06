@@ -15,3 +15,26 @@ var greetingArrow = (name) => {
 };
 
 console.log(greetingArrow("shawn2"));
+
+//p.61
+//암시적 반환
+const greet = name => `hello ${name}`;
+
+console.log(greet("shawn3"));
+
+//ES5의 함수 선언 방식과 ArrowFunctino비교
+//결과는 모두 같지만 훨씬 간결해진다
+const oldFunction = function(name){
+    return "hello " + name;
+}
+const arrowFunction = name => `hello ${name}`;
+
+
+const race = "100m dash";
+const runners = ["Usain Bolt", "Justin Gatlin", "Asafa Powell"];
+
+const results = runners.map((runner,i) => ({name : runner, race, place : i + 1}));
+
+console.log("results : ", results);
+
+//runners.map()함수가 iteration이라고 하는데 어떤 기능인지 자세히 알아봐야겠다.
