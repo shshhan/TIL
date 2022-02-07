@@ -38,3 +38,9 @@ const results = runners.map((runner,i) => ({name : runner, race, place : i + 1})
 console.log("results : ", results);
 
 //runners.map()함수가 iteration이라고 하는데 어떤 기능인지 자세히 알아봐야겠다.
+
+//화살표 함수는 익명함수
+//참조할 일므이 필요하다면 함수를 변수에 할당
+
+const anonymousFunction = name => `hello ${name}`;
+console.log(anonymousFunction("Shawn4"));
