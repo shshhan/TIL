@@ -52,3 +52,35 @@ console.log(ln);
 
 //p.94
 //array desctructuring
+//배열에서는 {}가 아닌 []를 사용하여 destructure
+const person4 = ["Han", "Seoul", 28];
+const [name4, city4, age] = person4;
+console.log(name4);
+console.log(city4);
+console.log(age);
+
+//배열의 모든 요소가 아닌 필요한 요소만 destructure 가능
+const [name4_1, city4_1] = person4;
+console.log(name4_1);
+console.log(city4_1);
+
+//rest연산자(...)를 사용하면 나머지 모든 값 destructure 가능
+const person5 = ["Shawn", "Seoul", "pizza", "iceCream", "steak"];
+const [name5, city5, ...food] = person5;
+console.log(name5);
+console.log(city5);
+console.log(food);
+
+
+//p.95
+
+let hungry = "yes";
+let full = "no";
+
+console.log(hungry);
+console.log(full);
+
+[hungry, full] = [full, hungry];
+
+console.log(hungry);
+console.log(full);
