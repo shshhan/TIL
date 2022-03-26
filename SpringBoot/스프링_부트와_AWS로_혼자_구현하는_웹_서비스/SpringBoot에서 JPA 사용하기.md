@@ -416,6 +416,26 @@ public class PostsApiController {
 - final로 필드를 선언하고 @RequiredArgsConstructor로 생성자 생성.
 - 직접 생성자를 만드는 대신 롬복을 사용하는 이유 : 클래스의 의존성 관계가 변경될 때마다 코드를 계속 수정하는 번거로움을 해결하기 위해
 
+
+## PostsRepository
+```java
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.List;
+
+public interface PostsRepository extends JpaRepository<Posts, Long> {
+
+    @Query("SELECT p FROM Posts p ORDER BY p.id DESC")
+    List<Posts> findAllDesc();
+
+}
+```
+SpringDataJPA에서 제공하지 않는 메서드는 @Query와 함께 쿼리문으로 작성할 수 있다.
+규모가 있는 프로젝트에서의 데이터 조회는 FK의 Join, 복잡한 조건 등으로 인해 Entity 클래스만으로 처리하기 어려워 조회용 프레임워크를 추가로 사용한다.
+대표적으로 querydsl, jooq, myBatis가 있다.
+프레임워크로 조회하고, 등록/수정/삭제는 SpringDataJpa를 사용한다.
+
 ## PostsService
 
 ```java
@@ -484,6 +504,9 @@ public class PostsService {
 ### delete
 - delete()는 엔티티를 파라미터로 삭제할 수 있고, deleteBuId()를 사용하면 id로 삭제할 수도 있다.
 - 여기서는 존재하는 Posts인지 확인을 위해 엔티티 조회 후 그대로 삭제
+
+### @Transactional(readOnly = true)
+- 트랜잭션 범위는 유지하되, 조회기능만 남겨두어 조회 속도 개선된다.
 
 ## PostsSaveRequestDto
 
@@ -686,7 +709,6 @@ public class PostsApiControllerTest {
 ### @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 
 - JPA 기능까지 한번에 테스트 할 때는 @SpringBootTest와 TestRestTemplate을 활용한다.
-
 ---
 ---
 
