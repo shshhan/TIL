@@ -247,3 +247,122 @@ export default {
 ```
 - export할 데이터가 많을 경우에는 export default 안에 데이터를 넣는 것이 편하다.
 - import한 변수명을 그대로 사용하고자 할 경우에는 예제처럼 이름만 선언해주어도 된다.(JS ES6 문법)
+
+
+## 컴포넌트
+
+html 반복을 피하고 재사용성을 극대화하기 위해 단위별로 분리한 것.
+
+```jsx
+(ComponentPractice.vue)
+
+<template>
+  <h4> 제목 </h4>
+  <p> 내용 </p>
+</template>
+
+<script>
+  export default {
+    name: "componentPractice",
+  }
+</script>
+
+```
+
+```jsx
+(App.vue)
+
+<template>
+  <component>
+  </component>
+  혹은
+  <component/>
+<template/>    
+    
+<script>
+  import component from './ComponentPractice.vue'
+	
+  export default{
+    data(){
+    },
+    components : {
+      component,
+    },
+  }
+</script>
+
+```
+
+- .vue 파일의 컴포넌트를 생성한 뒤 import한다.
+- components 항목 안에 import시 생성한 변수명을 등록한다.
+- <변수명> 형태로 html을 사용한다.
+
+**과도한 컴포넌트 사용은 오히려 코드가 복잡해질 수 있다.**
+
+## Props
+
+부모 컴포넌트가 자식 컴포넌트에 데이터를 보내는 문법
+
+```jsx
+(App.vue)
+
+<template>
+  <component :dataObj="data" :dataNumber="2" dataString="abcd" />   
+  //data(){}에 선언되어 있는 경우에는 데이터의 변수명을 입력
+  //선언되어 있지 않은 경우 데이터의 값
+  //선언되어 있지 않은 String 타입일 경우 :없이 사용 가능
+</template>
+  
+<script>
+  import component from './Component.vue'
+	
+  export default{
+    data(){
+      return(){
+        data : { title : "제목", content : "내용" },
+      }
+    }, 
+    components : {
+      component,
+    },
+  }
+</script>
+```
+
+- 부모 컴포넌트에서 데이터 전송
+    
+    App.vue의 자식 컴포넌트 태그에 속성으로 : 변수명=데이터
+    
+    - 하단 data(){}에 선언되어있는 경우 : 변수명
+    - 선언되어 있지 않을 경우 : 데이터의 값(기본형, 배열 등등)
+    - String일 경우 : 앞에 :을 붙이지 않고 변수명=”abcd”의 형태로 가능
+
+```jsx
+(ComponentPractice.vue)
+
+<template>
+  <h4> {{ dataObj.id }} </h4>
+  <p> {{ dataObj.content }} </p>
+  <p> {{ dataNumber }}</p>
+  <p> {{ dataString}}</p>
+</template>
+
+<script>
+  export default {
+    name: "componentPractice",
+  },
+  props : {
+    dataObj : Object,
+    dataNumber : Number,
+    dataString : String,
+  }
+</script>
+
+```
+
+- 자식 컴포넌트에서 props 객체 내부에 전달받은 데이터의 이름을 선언하고 자료형을 그 값으로 등록
+- 전달받은 데이터를 사용할 때에는 데이터 바인딩으로 사용
+- props로 전달받은 데이터는 readOnly.	
+  값q을 변경하기 위해서는 customEvent 문법을 사용해야 한다.
+- 데이터를 처음부터 자식 컴포넌트에서 생성하면 안될까?
+해당 컴포넌트에서만 사용하고 끝날 데이터라면 자식 컴포넌트에서 생성해도 상관없지만, 다른 컴포넌트에서도 사용할 데이터라면 해당 데이터를 사용하는 컴포넌트 중 최상단 컴포넌트에서 생성하는 것이 좋다.
