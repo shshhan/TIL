@@ -178,7 +178,468 @@ scope에 openid가 있으면 Open Id Provider로 인식하는데, 이렇게 된�
 ```
 spring.profiles.include=oauth
 ```
-    
+---
+---
+
+구글의 OAuth 클라이언트 ID 설정까지 마쳤으니 이제 프로젝트에서 이를 적용해보려고 한다.
+
+우선 사용자 정보와 관련된 부분 먼저 구현해보도록 하자.
+
+## User
+
+로그인한 사용자의 정보를 담당한 도메인인 User 클래스
+
+``` java
+package com.shawn.springboot.domain.user;
+
+import com.shawn.springboot.domain.BaseTimeEntity;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+import javax.persistence.*;
+
+@Getter
+@NoArgsConstructor
+@Entity
+public class User extends BaseTimeEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String name;
+
+    @Column(nullable = false)
+    private String email;
+
+    @Column
+    private String picture;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = true)
+    private Role role;
+
+    @Builder
+    public User(String name, String email, String picture, Role role){
+        this.name = name;
+        this.email = email;
+        this.picture = picture;
+        this.role = role;
+    }
+
+    public User update(String name, String picture){
+        this.name = name;
+        this.picture = picture;
+
+        return this;
+    }
+
+    public String getRoleKey(){
+        return this.role.getKey();
+    }
+
+}
+
+```
+
+### @Enumerated(EnumType.STRING)
+- JPA로 데이터베이스로 저장할 때 Enum 값을 어떤 형태로 저장할지 결정
+- 기본적으로는 int로 된 숫자가 저장되는데 DB에서 확인시 그 값이 어떤 코드를 의미하는지 알수 없기 때문에 문자열로 저장될 수 있도록 선언
+
+
+## Role
+
+각 사용자의 권한을 관리할 Enum 클래스
+
+``` java
+package com.shawn.springboot.domain.user;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+@Getter
+@RequiredArgsConstructor
+public enum Role {
+
+    GUEST("ROLE_GUEST", "손님"),
+    USER("ROLE_USER", "일반 사용자");
+
+    private final String key;
+    private final String title;
+}
+
+```
+- 스프링 시큐리티에는 권한 코드에 항상 ROLE_이 앞에 있어야하기 때문에, 코드별 키 값을 ROLE_GUEST, ROLE_USER 등으로 지정.
+
+
+## UserRepository
+User의 CRUD를 위한 DB Layer
+``` java
+package com.shawn.springboot.domain.user;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+
+public interface UserRepository extends JpaRepository<User, Long> {
+
+    Optional<User> findByEmail(String email);
+}
+
+```
+
+### findByEmail
+- 소셜 로그인으로 반환되는 값 중 email을 통해 이미 생성된 사용자인지 처음 가입하는 사용자인지 판단하기 위한 메서드
+
+---
+
+사용자 정보와 관련된 부분의 구현은 모두 끝났다.
+이제 본격적으로 시큐리티 관련 로직을 구현할 차례이다.
+
+## build.gradle
+
+```
+...
+dependencies{
+	...
+    compile('org.springframework.boot:spring-boot-starter-oauth2-client')
+    ...
+}
+...
+```
+
+### Spring-boot-starter-oauth2-client
+- 소셜 로그인 등 클라이언트 입장에서 소셜 기능 구현시 필요한 의존성
+- spring-security-oauth2-client와 spring-security-oauth2-jose를 관리
+
+## SecurityConfig
+시큐리티 설정 클래스
+
+시큐리티 관련 클래스를 위치시킬 config.auth 패키지를 생성하고, 이 클래스 역시 config.auth 패키지에 생성한다.
+``` java
+package com.shawn.springboot.config.auth;
+
+import com.shawn.springboot.domain.user.Role;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+
+
+@RequiredArgsConstructor
+@EnableWebSecurity  
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+
+    private final CustomOAuth2UserService customOAuth2UserService;
+
+    protected void configure(HttpSecurity http) throws Exception{
+        http
+                .csrf().disable()
+                .headers().frameOptions().disable()
+                .and()
+                    .authorizeRequests()
+                    .antMatchers("/", "/css/**", "/images/**", "/js/**", "/h2-console/**").permitAll()
+                    .antMatchers("/api/v1/**").hasRole(Role.USER.name())    
+                    .anyRequest().authenticated()   
+                .and()
+                    .logout()
+                        .logoutSuccessUrl("/")
+                .and()
+                    .oauth2Login() 
+                        .userInfoEndpoint()
+                            .userService(customOAuth2UserService);
+    }
+
+}
+
+```
+### @EnableWebSecurity
+- spring Security 설정들을 활성화
+
+### .csrf().disable().headers().frameOptions().disable()
+- h2-console 화면을 사용하기 위해 해당 옵션들을 disable
+
+### .authorizeRequests()
+- URL별 권한 관리를 설정하는 옵션의 시작점
+- authorizeRequests가 선언되어야만 antMatchers 옵션 사용 가능
+
+### .antMatchers()
+- 권한 관리 대상을 지정하는 옵션
+- URL, HTTP 메서드별로 관리 가능
+- "/", "/h2-console/** " 등 지정된 URL은 permitAll() 옵션을 통해 전체 열람 권한 부여
+- "/api/v1/** " 주소를 가진 API는 USER 권한만 열람 권한 부여
+
+### .anyRequest
+- antMatchers로 설정된 URL 외의 나머지 URL에 대한 설정
+- authenticated() 옵션으로 인증된 사용자, 즉 로그인한 사용자들에게만 열람 권한 부여
+
+### .logout()
+- 로그아웃 기능에 대한 설정의 시작점
+- logoutSuccessUrl("/")은 로그아웃 성공시 "/" 주소로 이동을 의미
+
+### .auth2Login()
+- OAuth2 로그인 기능에 대한 설정의 시작점
+- userInfoEndpoint()은 로그인 성공 후 사용자 정보를 가져올 때의 설정을 담당
+- userService()은 소셜 로그인 성공 시 후속 조치를 진행할 UserService 인터페이스의 구현체를 등록
+여기서는 customOAuth2UserService를 UserService 인터페이스의 구현체로 등록
+리소스 서버(구글, 네이버, 카카오 등)에서 사용자 정보를 가져온 상태에서 추가로 진행하고자 하는 기능 명시 가능
+
+## CustomOAuth2UserService
+소셜 로그인 이후 가져온 사용자의 정보(email, name, picture 등)을 기반으로 가입 및 정보 수정, 세션 저장 등의 기능을 제공하는 클래스
+
+``` java
+package com.shawn.springboot.config.auth;
+
+import com.shawn.springboot.config.auth.dto.OAuthAttributes;
+import com.shawn.springboot.config.auth.dto.SessionUser;
+import com.shawn.springboot.domain.user.User;
+import com.shawn.springboot.domain.user.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
+import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
+import org.springframework.security.oauth2.client.userinfo.OAuth2UserService;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
+import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.stereotype.Service;
+
+import javax.servlet.http.HttpSession;
+import java.util.Collections;
+
+@RequiredArgsConstructor
+@Service
+public class CustomOAuth2UserService implements OAuth2UserService<OAuth2UserRequest, OAuth2User> {
+
+    private final UserRepository userRepository;
+    private final HttpSession httpSession;
+
+    @Override
+    public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
+        OAuth2UserService<OAuth2UserRequest,OAuth2User> delegate = new DefaultOAuth2UserService();
+        OAuth2User oauth2User = delegate.loadUser(userRequest);
+
+        String registrationId = userRequest.getClientRegistration().getRegistrationId(); 
+        String userNameAttributeName = userRequest.getClientRegistration().getProviderDetails().getUserInfoEndpoint().getUserNameAttributeName();
+            
+        OAuthAttributes attributes = OAuthAttributes.of(registrationId, userNameAttributeName, oauth2User.getAttributes());
+
+        User user = saveOrUpdate(attributes);
+        httpSession.setAttribute("user", new SessionUser(user));    
+
+        return new DefaultOAuth2User(Collections.singleton(new SimpleGrantedAuthority(user.getRoleKey())), attributes.getAttributes(), attributes.getNameAttributeKey());
+    }
+
+    private User saveOrUpdate(OAuthAttributes attributes){
+        User user = userRepository.findByEmail(attributes.getEmail()).map(entity->entity.update(attributes.getName(), attributes.getPicture()))
+                .orElse(attributes.toEntity());
+
+        return userRepository.save(user);
+    }
+}
+
+```
+
+### registrationId
+- 현재 로그인 진행 중인 서비스를 구분. ex)구글, 네이버 등
+- 구글의 소셜로그인만 구현할 때는 필요 없지만, 이후 다른 플랫폼의 로그인을 연동할 때는 구글 로그인인지 네이버 로그인인지 구분하기 위해 사용.
+
+### userNameAttributeName
+- OAuth2 로그인 진행 시 키가 되는 필드값. Primary Key와 같은 의미
+- 구글의 기본 코드는 "sub", 네이버와 카카오는 기본 지원X
+
+### OAuthAttributes
+- OAuth2UserService를 통해 가져온 OAuth2User의 attribute를 담을 클래스
+
+### SessionUser
+- 세션에 사용자 정보를 저장하기 위한 Dto 클래스
+
+### saveOrUpdate()
+- 사용자의 이메일로 유저 정보를 찾아 있으면 로그인 유저의 정보를 새롭게 업데이트
+- 유저 정보가 없다면 유저 정보를 등록
+
+## OAuthAttributes
+OAuth2UserService를 통해 가져온 OAuth2User의 속성을 담는 클래스
+
+``` java
+package com.shawn.springboot.config.auth.dto;
+
+import com.shawn.springboot.domain.user.Role;
+import com.shawn.springboot.domain.user.User;
+import lombok.Builder;
+import lombok.Getter;
+
+import java.util.Map;
+
+@Getter
+public class OAuthAttributes {
+    private Map<String, Object> attributes;
+    private String nameAttributeKey;
+    private String name;
+    private String email;
+    private String picture;
+
+    @Builder
+    public OAuthAttributes(Map<String, Object> attributes, String nameAttributeKey, String name, String email, String picture){
+        this.attributes = attributes;
+        this.nameAttributeKey = nameAttributeKey;
+        this.name = name;
+        this.email = email;
+        this.picture = picture;
+    }
+
+    public static OAuthAttributes of(String registrationId, String userNameAttributeName, Map<String, Object> attributes){
+        return ofGoogle(userNameAttributeName, attributes);
+    }
+
+    private static OAuthAttributes ofGoogle(String userNameAttributeName, Map<String, Object> attributes){
+        return OAuthAttributes.builder()
+                .name((String) attributes.get("name"))
+                .email((String) attributes.get("email"))
+                .picture((String) attributes.get("picture"))
+                .attributes(attributes)
+                .nameAttributeKey(userNameAttributeName)
+                .build();
+    }
+
+    public User toEntity(){
+        return User.builder()
+                .name(name)
+                .email(email)
+                .picture(picture)
+                .role(Role.GUEST)
+                .build();
+    }
+}
+
+```
+### of()
+- OAuth2User에서 반환하는 사용자 정보는 Map이기 때문에 값 하나하나를 변환해야 한다.
+
+### toEntity()
+- User Entity를 생성
+- OAuthAttributes에서 엔티티를 생성하는 시점은 처음 가입 시점
+- 가입 시 기본 권한을 GUEST로 주기 위해 role 빌더 값에 Role.GUEST 값 입력
+
+## SessionUser
+인증된 사용자 정보를 담는 클래스
+
+``` java
+package com.shawn.springboot.config.auth.dto;
+
+import com.shawn.springboot.domain.user.User;
+import lombok.Getter;
+
+import java.io.Serializable;
+
+@Getter
+public class SessionUser implements Serializable {
+    private String name;
+    private String email;
+    private String picture;
+
+    public SessionUser(User user) {
+        this.name = user.getName();
+        this.email = user.getEmail();
+        this.picture = user.getPicture();
+    }
+}
+```
+### User 클래스가 아닌 별도의 클래스를 생성해 세션에 사용자 정보를 등록하는 이유
+- 세션에 저장하기 위해서는 직렬화를 해야한다.
+- User 클래스는 Entity 클래스이기 때문에 @OneToMany, @ManyToMany 등 다른 엔티티와의 관계가 형성 될 수 있다.
+- 만약 Entity가 다른 Entity와 관계가 형성 되어있을 때 직렬화를 구현한다면, 다른 Entity까지 직렬화 대상에 포함되어 **성능 이슈, 부수 효과**가 발생할 확률이 높다.
+- 따라서 **직렬화를 구현한 세션 DTO를 추가로 생성해 사용하는 것이 운영 및 유지보수에 편리**하다.
+
+---
+이렇게 서버의 설정은 모두 끝났다.
+
+이제 화면에서 구글 로그인 버튼을 만들어서 정상적으로 로그인이 되는지 테스트를 해볼 차례이다.
+"스프링 부트와 AWS로 혼자 구현하는 웹 서비스"에서 mustache로 구현한 화면에 로그인 버튼을 만들어본다.
+
+## index.mustache
+
+``` html
+    <div class="row">
+        <div class="col-md-6">
+            <a href="/posts/save" role="button" class="btn btn-primary">글 등록</a>
+            {{#userName}}
+                Logged in as: <span id="user">{{userName}}</span>
+                <a href="/logout" class="btn btn-info active" role="button">Logout</a>
+            {{/userName}}
+            {{^userName}}
+                <a href="/oauth2/authorization/google" class="btn btn-success active" role="button">Google Login</a>
+            {{/userName}}
+        </div>
+    </div>
+```
+
+### {{#userName}}, {{^userName}}
+- userName 변수를 갖고 있다면 {{#userName}} ~ {{/userName}} 블럭이, 없다면 {{^#userName}} ~ {{/userName}} 블럭이 실행된다.
+
+### href="/logout"
+- 스프링 시큐리티에서 기본적으로 제공하는 로그아웃 URL
+- 개발자가 별도로 로그아웃 URL을 가진 컨트롤러를 만들 필요 없음.
+
+### href="/oauth2/authorization/google"
+- 스프링 시큐리티에서 기본적으로 제공하는 로그인 URL
+- 로그아웃과 마찬가지로 개발자가 별도의 컨트롤러를 생성할 필요 없음.
+
+## IndexController
+index.mustache에서 userName을 사용할 수 있도록 IndexController에서 userName을 model에 추가해야 한다.
+``` java
+package com.shawn.springboot.web;
+
+import javax.servlet.http.HttpSession;
+
+@RequiredArgsConstructor
+@Controller
+public class IndexController{
+
+    private final PostsService postsService;
+    private final HttpSession httpSession;
+
+    @GetMapping("/")
+    public String index(Model model) {
+        model.addAttribute("posts", postsService.findAllDesc());
+
+        SessionUser user = (SessionUser)httpSession.getAttribute("user");
+
+        if(user != null) {
+            model.addAttribute("userName", user.getName());
+        }
+
+        return "index";
+    }
+}
+        
+```
+### (SessionUser)httpSession.getAttribute("user")
+- CustomOAuth2UserService에서 로그인 성공시 세션에 저장한 SessionUser 객체를 가져옴.
+
+## 웹에서 테스트 해보기
+
+![](https://velog.velcdn.com/images/shawnhansh/post/96759e4a-5c10-4a71-9da7-058765533be0/image.png)
+
+서버를 구동시켜서 index.mustache에 구글 로그인을 추가한 화면을 보니 버튼이 제대로 추가되었다.
+
+![](https://velog.velcdn.com/images/shawnhansh/post/dafd27d0-091e-4304-b3e3-85f6de1f3d4b/image.png)
+
+구글 로그인 버튼을 선택하니 익숙한 구글 로그인 화면이 나타났다.
+화면에 보이는 계정은 구글에서 동의화면을 구성하고 클라이언트 ID를 생성할 때 테스트가 가능하도록 추가해놓은 구글 계정이다.
+계정을 선택해서 로그인을 시도해보았다.
+
+![](https://velog.velcdn.com/images/shawnhansh/post/ed25d49b-96bb-47f9-9c6b-1eb542d9cf05/image.png)
+
+정상적으로 로그인이 된 것을 확인 할 수 있다.
+
+![](https://velog.velcdn.com/images/shawnhansh/post/a4fcf0ed-de81-44e5-b84f-2793248c8e91/image.png)
+
+DB의 유저 정보를 확인해보아도 제대로 회원가입이 된 것을 알 수 있다.
+OAuthAttributes에서 구현한대로 처음 회원 가입시 권한이 GUEST로 설정 되어 있는 것을 확인할 수 있다.
+
 ---
 참고
 - [이동욱님](https://jojoldu.tistory.com/) 저서 '[스프링 부트와 AWS로 혼자 구현하는 웹 서비스](http://www.kyobobook.co.kr/product/detailViewKor.laf?ejkGb=KOR&mallGb=KOR&barcode=9788965402602)'
