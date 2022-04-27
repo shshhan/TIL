@@ -641,6 +641,155 @@ DB의 유저 정보를 확인해보아도 제대로 회원가입이 된 것을 �
 OAuthAttributes에서 구현한대로 처음 회원 가입시 권한이 GUEST로 설정 되어 있는 것을 확인할 수 있다.
 
 ---
+---
+
+이전에 포스팅까지해서 구글 로그인 구현을 완료했다.
+기본적인 뼈대만 잡은 상태이지만 만약 이 상태로 프로젝트를 키워 나간다면 필연적으로 반복되게 될 코드가 있다.
+바로 IndexController에서 세션값을 가져오는 부분이다.
+
+index 메서드 외에 다른 컨트롤러나 메서드에서 세션값이 필요하면 반복적으로 코드를 작성하게 될 것이고, 이럴경우 유지보수가 어렵고 수정 시 실수할 가능성이 높아진다.
+그래서 해당 부분을 어노테이션 기반으로 개선해보려고 한다.
+
+## LoginUser
+config.auth 패키지에 생성한다.
+
+``` java
+package com.shawn.springboot.config.auth;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@Target(ElementType.PARAMETER)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface LoginUser {
+
+}
+
+```
+### @Target(ElementType.PARAMETER)
+- 어노테이션이 적용될 수 있는 위치를 ElementType Enum의 속성으로 정의
+- ElementType Enum
+    - ANNOTATION_TYPE	: 어노테이션 타입
+    - CONSTRUCTOR		: 생성자 
+    - FIELD				: (ENUM 상수를 포함한) 필드
+    - LOCAL_VARAIABLE	: 지역변수
+    - METHOD			: 메서드
+    - PACKAGE			: 패키지
+    - PARAMETER			: 파라미터
+    - TYPE				: 클래스, (어노테이션을 포함한)인터페이스, ENUM
+    - TYPE_PARAMETER	: 타입 매개변수
+    - TYPE_USE			: 타입이 사용되는 모든 곳
+ 
+### @interface
+- 이 파일을 어노테이션으로 지정
+
+
+## LoginUserArgumentResolver
+HandlerMethodArgumentResolver 인터페이스를 구현하는 클래스
+조건에 맞는 경우 메서드가 있다면 HandlerMethodArgumentResolver가 지정한 값으로 해당 메서드의 파라미터로 넘길 수 있다.
+
+``` java
+package com.shawn.springboot.config.auth;
+
+import com.shawn.springboot.config.auth.dto.SessionUser;
+import lombok.RequiredArgsConstructor;
+import org.springframework.core.MethodParameter;
+import org.springframework.stereotype.Component;
+import org.springframework.web.bind.support.WebDataBinderFactory;
+import org.springframework.web.context.request.NativeWebRequest;
+import org.springframework.web.method.support.HandlerMethodArgumentResolver;
+import org.springframework.web.method.support.ModelAndViewContainer;
+
+import javax.servlet.http.HttpSession;
+
+@RequiredArgsConstructor
+@Component
+public class LoginUserArgumentResolver implements HandlerMethodArgumentResolver {
+
+    private final HttpSession httpSession;
+
+    @Override
+    public boolean supportsParameter(MethodParameter parameter) {
+        boolean isLoginUserAnnotation = parameter.getParameterAnnotation(LoginUser.class) != null;
+        boolean isUserClass = SessionUser.class.equals(parameter.getParameterType());
+        return isLoginUserAnnotation && isUserClass;
+    }
+
+    @Override
+    public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer, NativeWebRequest webRequest, WebDataBinderFactory binderFactory) throws Exception {
+        return httpSession.getAttribute("user");
+    }
+    
+}
+
+```
+### supportParameter()
+- 컨트롤러 메서드의 특정 파라미터를 지원하는지 판단
+- 파라미터에 @LoginUser 어노테이션이 있고, 파라미터의 클래스 타입이 SessionUser.class인 경우 return true
+
+### resolveArgument()
+- 파라미터에 전달할 객체를 생성
+- 여기서는 세션에서 유저 객체를 가져온다
+
+
+## WebConfig
+config 패키지에 생성한다.
+LoginUserArgumentResolver가 스프링에서 인식 될 수 있도록 설정하는 클래스
+
+``` java
+package com.shawn.springboot.config;
+
+import com.shawn.springboot.config.auth.LoginUserArgumentResolver;
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.method.support.HandlerMethodArgumentResolver;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.util.List;
+
+@RequiredArgsConstructor
+@Configuration
+public class WebConfig implements WebMvcConfigurer {
+    private final LoginUserArgumentResolver loginUserArgumentResolver;
+
+    @Override
+    public void addArgumentResolvers(List<HandlerMethodArgumentResolver> argumentResolvers){
+        argumentResolvers.add(loginUserArgumentResolver);
+    }
+
+}
+
+```
+---
+이제 @LoginUser 어노테이션으로 세션에 있는 로그인 유저 정보를 가져오는 설정이 모두 끝났다.
+
+``` java
+SessionUser user = (SessionUser)httpSession.getAttribute("user");
+```
+기존에 위의 로직이 이제 메서드에 @LoginUser로 파라미터를 선언해주는 것만으로 쉽게 구현할 수 있게 되었다.
+
+이제 IndexController의 index 메서드에서 세션에 있는 로그인 유저 정보를 가져오는 부분을 아래와 같이 @LoginUser로 간편하게 구현할 수 있다.
+
+## IndexController
+``` java
+public class IndexController {
+
+    private final PostsService postsService;
+
+    @GetMapping("/")
+    public String index(Model model, @LoginUser SessionUser user){
+        model.addAttribute("posts", postsService.findAllDesc());
+
+        if(user != null){
+            model.addAttribute("userName", user.getName());
+        }
+        return "index";
+    }
+   
+```
+---
 참고
 - [이동욱님](https://jojoldu.tistory.com/) 저서 '[스프링 부트와 AWS로 혼자 구현하는 웹 서비스](http://www.kyobobook.co.kr/product/detailViewKor.laf?ejkGb=KOR&mallGb=KOR&barcode=9788965402602)'
 - https://dextto.tistory.com/234
