@@ -20,7 +20,12 @@ gradle wrap
 gradle이 설치되어 있지 않다면 gradle을 먼저 설치 해야한다.
 ubuntu를 사용한다면 터미널을 통해 설치 명령어를 친절하게 알려주지만 본인이 필요한 버전이 목록에 없다면 직접 설치 해야한다.
 나의 경우는 당시 4.10.2 버전을 사용 중이어서 제공받은 명령어로 설치했지만 이후에 gradle 버전을 업그레이드하여 결국 다시 설치하였다.
-    
+
+> 내용 추가!
+[gradle 공식문서](https://docs.gradle.org/current/userguide/gradle_wrapper.html)에 따르면 wrapper는 gradle이 필요하기 전에 미리 선언된 버전의 gradle을 다운로드 받는 스크립트이고, 이를 활용하는 것이 gradle에서 권장하는 사용방식이라고 한다. 이렇게 함으로써 개발자는 직접 gradle을 설치하는 과정없이 빠르게 gradle을 사용할 수 있는 장점이 있다.
+따라서 직접 gradle을 설치할 필요 없이 서버의 jdk와 로컬의 gradle jvm의 버전만 일치시킨 뒤, 로컬에서 gradle-wrapper.jar를 git에 add하고 서버에서 pull할 때 같이 받아지게 하면 된다.
+아래에 나올 오류들도 결국은 환경의 차이에서 오는 오류였는데, 이렇게 하면 **환경에 종속적이지 않고** 프로젝트에서 gradlew 명령어로 gradle 명령어를 수행할 수 있다.
+
     
 ### 원하는 버전의 gradle 설치하기
 
