@@ -1,3 +1,5 @@
+> 해당 내용은 [이동욱님](https://jojoldu.tistory.com/) 저서 '[스프링 부트와 AWS로 혼자 구현하는 웹 서비스](http://www.kyobobook.co.kr/product/detailViewKor.laf?ejkGb=KOR&mallGb=KOR&barcode=9788965402602)'를 공부하며 정리한 내용입니다.
+
 지금까지는 스프링부트 프로젝트를 연습하며 로컬에서만 구동시켰지만, 이제 스프링부트 프로젝트를 EC2를 통해서 배포를 해보려고 합니다.
 
 로컬에서는 H2 DB를 사용했지만 실제 배포를 가정하면 RDB를 붙여주어야하기 때문에, 지난 번에 생성했던 AWS RDS를 붙일 생각입니다.
@@ -38,7 +40,10 @@ spring.session.store-type=jdbc
 
 ### spring.session.store-type=jdbc
 - 세션을 세션 스토리지가 아닌 DB로 사용하기 위한 옵션입니다.
-- 희망하지 않으시는 분은 아예 작성안하시면 됩니다.
+- DB를 세션 스토리지로 사용하기 위해서는 _spring-session-jdbc_를 의존성으로 등록해야합니다.
+  gradle을 사용하신다면 dependencies {} 내부에 _implementation('org.springframework.session:spring-session-jdbc')_을 추가해주세요.
+- 또한 spring-session-jdbc-x.x.x(버전).jar내부에서 schema-mysql.sql(Oracle DB를 연결했다면 schema-oracle.sql)를 찾아 내부의 SQL을 DB에 반영시켜주어야 합니다.
+  
 
 ## application-real-db.properties
 
@@ -60,7 +65,7 @@ spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
 spring.jpa.hibernate.ddl-auto=none
 spring.jpa.show_sql=true
 
-spring.datasource.hikari.jdbc-url=jdbc:mysql://DB주소:포트(기본은 3306)/database명ㅍ
+spring.datasource.hikari.jdbc-url=jdbc:mysql://DB주소:포트(기본은 3306)/database명
 spring.datasource.hikari.username=db계정
 spring.datasource.hikari.password=db계정 비밀번호
 spring.datasource.hikari.driver-class-name=com.mysql.cj.jdbc.Driver
@@ -75,7 +80,6 @@ spring.datasource.hikari.driver-class-name=com.mysql.cj.jdbc.Driver
 
 ---
 참고
-  - [이동욱님](https://jojoldu.tistory.com/) 저서 '[스프링 부트와 AWS로 혼자 구현하는 웹 서비스](http://www.kyobobook.co.kr/product/detailViewKor.laf?ejkGb=KOR&mallGb=KOR&barcode=9788965402602)'
   - https://jojoldu.tistory.com/539?category=717427
   - https://2dongdong.tistory.com/66
   
