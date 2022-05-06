@@ -75,6 +75,61 @@ nohup java -jar \
     
 ![](https://velog.velcdn.com/images/shawnhansh/post/a789befa-2904-4290-a902-6d0d3cb5e70a/image.png)
 
+## shell 파일로 간편하게 배포하기
+
+여타 과정은 둘째치고 jar 파일을 수행시키는 명령어만 해도 몇 줄이 되다보니 이건 반드시 shell 파일로 자동화를 시켜야겠다는 생각이 들었습니다.
+
+```
+REPOSITORY=~/app/springBoot
+PROJECT_NAME=SpringBootProject
+
+cd $REPOSITORY/$PROJECT_NAME
+
+echo "> Git Pull"
+
+git pull origin main
+
+echo "> 프로젝트 Build 시작"
+
+./gradlew build
+
+echo "> spirngBoot  디렉토리로 이동"
+
+cd $REPOSITORY
+
+echo "> Build 파일 복사"
+
+cp $REPOSITORY/$PROJECT_NAME/build/libs/*.jar $REPOSITORY/
+
+echo "> 현재 구동중인 애플리케이션 pid 확인"
+
+CURRENT_PID=$(pgrep -f {$PROJECT_NAME}*.jar)
+
+echo "현재 구동중인 애플리케이션 pid : $CURRENT_PID"
+
+if [ -z "$CURRENT_PID" ]; then
+        echo "> 현재 구동 중인 애플리케이션이 없으므로 종료하지 않습니다."
+else
+        echo "> kill -15 $CURRENT_PID"
+        kill -15 $CURRENT_PID
+        sleep 5
+fi
+
+echo "> 새 애플리케이션 배포"
+
+JAR_NAME=$(ls -tr $REPOSITORY/ | grep jar | tail -n 1)
+
+echo "> JAR NAME : $JAR_NAME"
+
+nohup java -jar \
+    -Dspring.config.location=classpath:/application.properties,classpath:/application-real.properties,/home/ubuntu/app/springBoot/application-oauth.properties,/home/ubuntu/app/springBoot/application-real-db.properties \
+    -Dspring.profiles.active=real \
+   $REPOSITORY/$JAR_NAME 2>&1 &
+```
+
+git pull -> build -> 파일 이동 -> 프로세스 확인 -> jar 실행의 순서로 진행 되도록 구현했습니다.
+자주 사용하는 경로는 변수에 담아놓고 이용했습니다.
+
 ---
 참고 
 
