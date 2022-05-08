@@ -78,10 +78,15 @@ nohup java -jar \
 ## shell 파일로 간편하게 배포하기
 
 여타 과정은 둘째치고 jar 파일을 수행시키는 명령어만 해도 몇 줄이 되다보니 이건 반드시 shell 파일로 자동화를 시켜야겠다는 생각이 들었습니다.
+git pull -> build -> 파일 이동 -> 프로세스 확인 -> jar 실행의 순서로 진행 되도록 구현했습니다.
+자주 사용하는 경로는 변수에 담아놓고 이용했습니다.
 
 ```
+#!/bin/bash
+
 REPOSITORY=~/app/springBoot
 PROJECT_NAME=SpringBootProject
+TODAY=$(date "+%Y%m%d")
 
 cd $REPOSITORY/$PROJECT_NAME
 
@@ -97,15 +102,11 @@ echo "> spirngBoot  디렉토리로 이동"
 
 cd $REPOSITORY
 
-echo "> Build 파일 복사"
-
-cp $REPOSITORY/$PROJECT_NAME/build/libs/*.jar $REPOSITORY/
-
 echo "> 현재 구동중인 애플리케이션 pid 확인"
 
-CURRENT_PID=$(pgrep -f {$PROJECT_NAME}*.jar)
+CURRENT_PID=$(pgrep -f $PROJECT_NAME)
 
-echo "현재 구동중인 애플리케이션 pid : $CURRENT_PID"
+echo "> 현재 구동중인 애플리케이션 pid : $CURRENT_PID"
 
 if [ -z "$CURRENT_PID" ]; then
         echo "> 현재 구동 중인 애플리케이션이 없으므로 종료하지 않습니다."
@@ -114,6 +115,16 @@ else
         kill -15 $CURRENT_PID
         sleep 5
 fi
+
+echo "> 기존 jar 백업"
+
+OLD_JAR_NAME=$(ls -tr $REPOSITORY/ | grep jar | tail -n 1)
+
+mv -i $OLD_JAR_NAME backup/$TODAY$OLD_JAR_NAME
+
+echo "> Build 파일 복사"
+
+cp $REPOSITORY/$PROJECT_NAME/build/libs/*.jar $REPOSITORY/
 
 echo "> 새 애플리케이션 배포"
 
@@ -125,13 +136,30 @@ nohup java -jar \
     -Dspring.config.location=classpath:/application.properties,classpath:/application-real.properties,/home/ubuntu/app/springBoot/application-oauth.properties,/home/ubuntu/app/springBoot/application-real-db.properties \
     -Dspring.profiles.active=real \
    $REPOSITORY/$JAR_NAME 2>&1 &
+
 ```
 
-git pull -> build -> 파일 이동 -> 프로세스 확인 -> jar 실행의 순서로 진행 되도록 구현했습니다.
-자주 사용하는 경로는 변수에 담아놓고 이용했습니다.
+- #!/bin/bash
+    - #!는 스크립트를 실행할 쉘을 지정하는 선언문입니다.
+    - 즉, 이 스크립트를 bash shell로 실행시키겠다는 선언문입니다.
+
+- pgrep -f
+    - pgrep -f XXX 명령어는 사용하면 XXX의 pid를 리턴합니다.
+
+- if [ -z XXX ]
+    - [ -z XXX ] 옵션을 사용하면 XXX의 길이가 0일 때 참을 리턴합니다.
+    - 즉, 해당 if문은 pgrep 명령어에서 리턴된 값이 없으면 종료하지 않겠다는 메세지만 띄워주고, 리턴된 값이 있으면 해당 프로세스를 종료하는 역할을 하게 됩니다.
+
+- kill -15
+	-
+    - kill 명령어에 -15 옵션을 사용하면 메모리상에 있는 데이터와 각종 설정 및 환경 파일들을 안전하게 저장시킨후 **정상 종료** 시킵니다.
+    - -9 옵션은 해당 프로세스를 **강제 종료** 시킵니다.
 
 ---
 참고 
 
 - https://joonyon.tistory.com/98
 - http://it-archives.com/222343367697/
+- https://starrykss.tistory.com/1700
+- https://blog.naver.com/PostView.naver?blogId=eunjiban&logNo=220694919686&redirect=Dlog&widgetTypeCall=true&directAccess=false
+- https://storycompiler.tistory.com/101
