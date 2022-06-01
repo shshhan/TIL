@@ -151,9 +151,76 @@ nohup java -jar \
     - 즉, 해당 if문은 pgrep 명령어에서 리턴된 값이 없으면 종료하지 않겠다는 메세지만 띄워주고, 리턴된 값이 있으면 해당 프로세스를 종료하는 역할을 하게 됩니다.
 
 - kill -15
-	-
     - kill 명령어에 -15 옵션을 사용하면 메모리상에 있는 데이터와 각종 설정 및 환경 파일들을 안전하게 저장시킨후 **정상 종료** 시킵니다.
     - -9 옵션은 해당 프로세스를 **강제 종료** 시킵니다.
+    
+    
+---
+내용추가(2022.06.01)
+
+최근 build.gradle의 내용을 조금 수정하여 jar 파일명에 시간 정보를 추가하는 방법을 알게되었습니다.
+
+```
+version = [버전 정보] + new Date().format("yyyyMMddHHmmss")
+```
+
+위 코드와 같이 build.gradle의 version에 기본적으로 설정되는 버전정보와 date 객체를 format하여 추가해주면 jar 파일명에 빌드 초까지 명시됩니다.
+
+이에 따라 기존 shell에서 기존 jar에 시간 정보를 추가하는 부분이 필요 없어졌습니다.
+또한 1초 이내에 두번 이상 빌드를 하는게 아니라면 jar이 중복되지 않기 때문에 기존처럼 매번 jar 파일이 생성되는 경로인 build/libs에서 jar을 이동시킬 필요가 없어졌고 별도의 백업 폴더에 저장하지 않아도 이경로에서 자연스럽게 jar 파일 히스토리 관리가 가능해졌습니다.
+
+아래는 위에서 언급한 불필요해진 로직을 정리하고 단순히 현재 구동 중인 jar을 확인하기 위해 상위 디렉토리로 복사하는 로직만 추가된 새로운 배포 shell 내용입니다.
+($REPOSITORY와 $PROJECT의 값은 프로젝트마다 상이하므로 위의 shell 내용과 다를 수 있습니다.)
+
+```
+#!/bin/bash
+
+REPOSITORY=~/app/springBoot
+PROJECT_NAME=SpringBootProject
+OLD_JAR_NAME=$(ls -tr $REPOSITORY/ | grep jar | tail -n 1)
+
+cd $REPOSITORY/$PROJECT_NAME
+
+echo "> Git Pull"
+
+git pull origin main
+
+echo "> 프로젝트 Build 시작"
+
+./gradlew build
+
+echo "> 현재 구동중인 애플리케이션 pid 확인"
+
+CURRENT_PID=$(pgrep -f $OLD_JAR_NAME)
+
+echo "> 현재 구동중인 애플리케이션 pid : $CURRENT_PID"
+
+if [ -z "$CURRENT_PID" ]; then
+        echo "> 현재 구동 중인 애플리케이션이 없으므로 종료하지 않습니다."
+else
+        echo "> kill -15 $CURRENT_PID"
+        kill -15 $CURRENT_PID
+        sleep 5
+fi
+
+NEW_JAR_NAME=$(ls -tr $REPOSITORY/$PROJECT_NAME/build/libs/ |grep jar |tail -n 1)
+
+echo "> NEW_JAR_NAME : $NEW_JAR_NAME"
+
+echo "> $REPOSITORY 경로에서 jar 제거"
+
+rm -rf ../*.jar
+
+echo "> Build 파일 복사"
+
+cp build/libs/$NEW_JAR_NAME $REPOSITORY/
+
+echo "> 새 애플리케이션 배포"
+
+nohup java -jar \
+       -Dspring.profiles.active=dev \
+       $REPOSITORY/$NEW_JAR_NAME 2>&1 &
+```
 
 ---
 참고 
